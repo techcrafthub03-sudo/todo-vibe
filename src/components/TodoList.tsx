@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getTodos } from '@/app/actions';
+import { collection, onSnapshot, query, orderBy, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 import TodoItem from './TodoItem';
 import { useAuth } from '@/lib/auth';
-import { Timestamp } from 'firebase/firestore';
 
 interface Todo {
     id: string;
@@ -20,10 +20,35 @@ export default function TodoList() {
 
   useEffect(() => {
     if (user) {
-        getTodos(user.uid).then(todos => {
-            setTodos(todos as Todo[]);
+        // The path to the user's specific todo collection
+        const collectionPath = `users/${user.uid}/todos`;
+        
+        // A query to get the todos and order them by creation date
+        const q = query(collection(db, collectionPath), orderBy('createdAt', 'desc'));
+
+        // onSnapshot creates the real-time listener
+        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+            const todosArray: Todo[] = [];
+            querySnapshot.forEach((doc) => {
+                // Important: include the document ID!
+                todosArray.push({ id: doc.id, ...doc.data() } as Todo);
+            });
+
+            setTodos(todosArray);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error listening to todos: ", error);
             setLoading(false);
         });
+
+        // This function is called when the component unmounts.
+        // It's crucial for preventing memory leaks.
+        return () => unsubscribe();
+
+    } else {
+        // If there's no user, clear the todos and stop loading.
+        setTodos([]);
+        setLoading(false);
     }
   }, [user]);
 
